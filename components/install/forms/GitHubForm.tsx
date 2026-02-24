@@ -1,20 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Github } from 'lucide-react';
-import { TokenInput } from '../TokenInput';
 import { ValidatingOverlay } from '../ValidatingOverlay';
 import { SuccessCheckmark } from '../SuccessCheckmark';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { FormProps } from './types';
 
-const GITHUB_TOKEN_MIN_LENGTH = 20;
-
 /**
- * Form de GitHub - token + fork - Tema Blade Runner.
- * Segunda tela do wizard. Valida token e cria fork do repositório.
+ * Form de GitHub - OAuth + fork - Tema Blade Runner.
+ * Segunda tela do wizard. Conecta via OAuth e cria fork do repositório.
  */
 export function GitHubForm({ data, onComplete, onBack, showBack }: FormProps) {
   const [token, setToken] = useState(data.githubToken || '');
@@ -24,63 +21,133 @@ export function GitHubForm({ data, onComplete, onBack, showBack }: FormProps) {
   const [error, setError] = useState<string | null>(null);
   const [forkFullName, setForkFullName] = useState<string | null>(null);
   const [forkUrl, setForkUrl] = useState<string | null>(null);
+  const [oauthInProgress, setOauthInProgress] = useState(false);
 
   const isValidRepoName = (name: string) => /^[a-zA-Z0-9_.-]{1,100}$/.test(name);
 
-  const handleValidateAndFork = async () => {
-    const tok = token.trim();
-    const repo = repoName.trim();
+  const handleValidateAndFork = useCallback(
+    async (forcedToken?: string) => {
+      const tok = (forcedToken ?? token).trim();
+      const repo = repoName.trim();
 
-    if (!repo) {
-      setError('Informe o nome do repositório');
-      return;
-    }
-    if (!isValidRepoName(repo)) {
-      setError('Nome do repositório inválido (use apenas letras, números, -, _ ou .)');
-      return;
-    }
-    if (tok.length < GITHUB_TOKEN_MIN_LENGTH) {
-      setError('Token deve ter pelo menos 20 caracteres');
-      return;
-    }
+      if (!repo) {
+        setError('Informe o nome do repositório');
+        return;
+      }
+      if (!isValidRepoName(repo)) {
+        setError('Nome do repositório inválido (use apenas letras, números, -, _ ou .)');
+        return;
+      }
+      if (!tok) {
+        setError('Falha ao obter autorização do GitHub. Tente conectar novamente.');
+        return;
+      }
 
-    setValidating(true);
-    setError(null);
+      setValidating(true);
+      setError(null);
 
-    const MIN_VALIDATION_TIME = 3000;
-    const startTime = Date.now();
+      const MIN_VALIDATION_TIME = 3000;
+      const startTime = Date.now();
+
+      try {
+        const res = await fetch('/api/installer/github/fork', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: tok, repoName: repo }),
+        });
+
+        const result = await res.json();
+
+        const elapsed = Date.now() - startTime;
+        if (elapsed < MIN_VALIDATION_TIME) {
+          await new Promise((r) => setTimeout(r, MIN_VALIDATION_TIME - elapsed));
+        }
+
+        if (!res.ok || !result.success) {
+          throw new Error(result.error || 'Falha ao criar fork');
+        }
+
+        setForkFullName(result.fullName || result.repoName || repo);
+        setForkUrl(result.forkUrl || (result.fullName ? `https://github.com/${result.fullName}` : undefined));
+        setSuccess(true);
+      } catch (err) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < MIN_VALIDATION_TIME) {
+          await new Promise((r) => setTimeout(r, MIN_VALIDATION_TIME - elapsed));
+        }
+        setError(err instanceof Error ? err.message : 'Falha ao conectar com GitHub');
+      } finally {
+        setValidating(false);
+      }
+    },
+    [token, repoName]
+  );
+
+  const startOAuth = useCallback(() => {
+    if (typeof window === 'undefined') return;
 
     try {
-      const res = await fetch('/api/installer/github/fork', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: tok, repoName: repo }),
-      });
+      setError(null);
+      setOauthInProgress(true);
+      const state =
+        (window.crypto && 'randomUUID' in window.crypto && window.crypto.randomUUID()) ||
+        Math.random().toString(36).slice(2);
+      window.sessionStorage.setItem('github_oauth_state', state);
 
-      const result = await res.json();
+      const width = 680;
+      const height = 720;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
 
-      const elapsed = Date.now() - startTime;
-      if (elapsed < MIN_VALIDATION_TIME) {
-        await new Promise((r) => setTimeout(r, MIN_VALIDATION_TIME - elapsed));
-      }
-
-      if (!res.ok || !result.success) {
-        throw new Error(result.error || 'Falha ao criar fork');
-      }
-
-      setForkFullName(result.fullName || result.repoName || repo);
-      setForkUrl(result.forkUrl || (result.fullName ? `https://github.com/${result.fullName}` : undefined));
-      setSuccess(true);
+      window.open(
+        `/api/installer/github/oauth/authorize?state=${encodeURIComponent(state)}`,
+        'github-oauth',
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
     } catch (err) {
-      const elapsed = Date.now() - startTime;
-      if (elapsed < MIN_VALIDATION_TIME) {
-        await new Promise((r) => setTimeout(r, MIN_VALIDATION_TIME - elapsed));
-      }
-      setError(err instanceof Error ? err.message : 'Falha ao conectar com GitHub');
-    } finally {
-      setValidating(false);
+      setOauthInProgress(false);
+      setError(err instanceof Error ? err.message : 'Falha ao abrir autorização do GitHub');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (typeof window === 'undefined') return;
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as
+        | { type?: string; token?: string; error?: string; state?: string }
+        | undefined;
+      if (!data || typeof data !== 'object') return;
+
+      if (data.type === 'github-oauth-success') {
+        const expectedState = window.sessionStorage.getItem('github_oauth_state') || '';
+        if (!data.state || data.state !== expectedState) {
+          return;
+        }
+        window.sessionStorage.removeItem('github_oauth_state');
+        setOauthInProgress(false);
+        setToken(data.token || '');
+        setError(null);
+
+        if (repoName.trim()) {
+          void handleValidateAndFork(data.token || '');
+        }
+      } else if (data.type === 'github-oauth-error') {
+        const expectedState = window.sessionStorage.getItem('github_oauth_state') || '';
+        if (!data.state || data.state !== expectedState) {
+          return;
+        }
+        window.sessionStorage.removeItem('github_oauth_state');
+        setOauthInProgress(false);
+        setError(data.error || 'Falha ao autorizar com o GitHub');
+      }
+    }
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [handleValidateAndFork, repoName]);
 
   const handleSuccessComplete = () => {
     const username =
@@ -134,7 +201,7 @@ export function GitHubForm({ data, onComplete, onBack, showBack }: FormProps) {
           Configurar GitHub
         </h2>
         <p className="mt-1 text-sm text-[var(--br-muted-cyan)] font-mono">
-          Token + fork do repositório
+          Conectar e criar fork automaticamente
         </p>
       </div>
 
@@ -162,43 +229,31 @@ export function GitHubForm({ data, onComplete, onBack, showBack }: FormProps) {
         </p>
       </div>
 
-      {/* Token */}
-      <div>
-        <TokenInput
-          value={token}
-          onChange={(val) => {
-            setToken(val);
-            setError(null);
-          }}
-          placeholder="cole o Personal Access Token aqui..."
-          validating={validating}
-          error={error || undefined}
-          minLength={GITHUB_TOKEN_MIN_LENGTH}
-          showCharCount={true}
-          accentColor="magenta"
-          autoSubmitLength={0}
-        />
-      </div>
-
       <Button
         type="button"
-        onClick={handleValidateAndFork}
+        onClick={() => {
+          if (token.trim()) {
+            void handleValidateAndFork();
+          } else {
+            startOAuth();
+          }
+        }}
         disabled={
           validating ||
+          oauthInProgress ||
           !repoName.trim() ||
-          !isValidRepoName(repoName.trim()) ||
-          token.trim().length < GITHUB_TOKEN_MIN_LENGTH
+          !isValidRepoName(repoName.trim())
         }
         className="w-full font-mono uppercase tracking-wider bg-[var(--br-neon-magenta)] hover:bg-[var(--br-neon-magenta)]/80 text-[var(--br-hologram-white)] font-bold shadow-[0_0_20px_var(--br-neon-magenta)/0.4] transition-all duration-200"
       >
-        Validar e criar fork
+        {token.trim() ? 'Criar fork' : 'Conectar GitHub e criar fork'}
       </Button>
 
       {!validating && (
         <details className="w-full group">
           <summary className="flex items-center justify-center gap-1.5 text-sm font-mono text-[var(--br-dust-gray)] hover:text-[var(--br-muted-cyan)] cursor-pointer list-none transition-colors">
             <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
-            Como criar conta, token e repo?
+            Como criar conta e repo?
           </summary>
           <div className="mt-3 p-3 rounded-lg bg-[var(--br-void-black)]/50 border border-[var(--br-dust-gray)]/30 text-left space-y-2">
             <ol className="text-xs font-mono text-[var(--br-muted-cyan)] space-y-2 list-decimal list-inside">
@@ -221,37 +276,20 @@ export function GitHubForm({ data, onComplete, onBack, showBack }: FormProps) {
                 </ol>
               </li>
               <li>
-                <span className="font-semibold text-[var(--br-hologram-white)]">Gerar o token de acesso</span>
+                <span className="font-semibold text-[var(--br-hologram-white)]">Autorizar acesso ao GitHub</span>
                 <ol className="mt-1 ml-4 list-disc space-y-1">
                   <li>
-                    Acesse{' '}
-                    <a
-                      href="https://github.com/settings/tokens"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[var(--br-neon-magenta)] hover:underline"
-                    >
-                      github.com/settings/tokens
-                    </a>
+                    Nesta tela, clique em <strong className="text-[var(--br-hologram-white)]">Conectar GitHub e criar fork</strong>. Uma nova janela do GitHub será aberta.
                   </li>
                   <li>
-                    Clique em <strong className="text-[var(--br-hologram-white)]">Generate new token (classic)</strong>.
-                  </li>
-                  <li>
-                    Nome: <strong className="text-[var(--br-hologram-white)]">VozzySmart</strong> (ou similar).
-                  </li>
-                  <li>
-                    Marque o scope <strong className="text-[var(--br-hologram-white)]">repo</strong> (full control).
-                  </li>
-                  <li>Gere o token e copie imediatamente (ele só aparece uma vez).</li>
+                    Confira os dados no GitHub, clique em <strong className="text-[var(--br-hologram-white)]">Authorize</strong> e aguarde alguns segundos.
                 </ol>
               </li>
               <li>
-                <span className="font-semibold text-[var(--br-hologram-white)]">Escolher o nome do repositório e colar o token</span>
+                <span className="font-semibold text-[var(--br-hologram-white)]">Escolher o nome do repositório</span>
                 <ol className="mt-1 ml-4 list-disc space-y-1">
                   <li>Defina um nome único para o repositório (ex.: <code>cliente-minha-loja-whatsapp</code>).</li>
-                  <li>Digite esse nome no campo \"Nome do repositório\" acima.</li>
-                  <li>Cole o token no campo de token e clique em <strong>Validar e criar fork</strong>.</li>
+                  <li>Digite esse nome no campo \"Nome do repositório\" acima e clique em <strong>Conectar GitHub e criar fork</strong>.</li>
                 </ol>
               </li>
             </ol>
