@@ -26,6 +26,7 @@ const PUBLIC_API_ROUTES = [
     '/api/health',            // Health checks
     '/api/system',            // Info básica do sistema
     '/api/installer',         // Setup inicial (protegido separadamente após install)
+    '/api/licenses/validate', // Validação de licença na tela 1 do wizard (GET público)
     '/api/campaign/workflow', // Chamado internamente pelo QStash
     '/api/public',            // Rotas explicitamente públicas (lead forms, etc)
 ]
@@ -121,6 +122,10 @@ export async function proxy(request: NextRequest) {
     // API Routes - Use API Key authentication
     // ==========================================================================
     if (pathname.startsWith('/api/')) {
+        // Validação de licença (GET) - público para tela 1 do wizard
+        if (pathname === '/api/licenses/validate' && request.method === 'GET') {
+            return NextResponse.next()
+        }
         // Auth endpoints are always public
         if (PUBLIC_API_ROUTES.some(route => pathname.startsWith(route))) {
             return NextResponse.next()
