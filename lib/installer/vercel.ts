@@ -377,8 +377,9 @@ export async function createVercelProjectFromRepo(
   teamId?: string
 ): Promise<{ projectId: string; projectName: string; teamId?: string }> {
   const name = projectName || repoFullName.split('/').pop() || 'smartzap';
+  const slug = name.replace(/[^a-z0-9-_]/gi, '-').toLowerCase().slice(0, 100);
   const body = {
-    name: name.replace(/[^a-z0-9-_]/gi, '-').toLowerCase().slice(0, 100),
+    name: slug,
     gitRepository: {
       type: 'github' as const,
       repo: repoFullName,
@@ -386,25 +387,39 @@ export async function createVercelProjectFromRepo(
     framework: 'nextjs' as const,
   };
 
-  const project = await vercelFetch<VercelProject>(
-    '/v11/projects',
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify(body),
-    },
-    teamId
-  );
+  try {
+    const raw = await vercelFetch<VercelProject | { project?: VercelProject }>(
+      '/v11/projects',
+      token,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      teamId
+    );
 
-  if (!project?.id || !project?.name) {
-    throw new Error('Resposta da Vercel sem id ou nome do projeto.');
+    const project = (raw && typeof raw === 'object' && 'project' in raw && raw.project)
+      ? raw.project
+      : (raw as VercelProject);
+
+    if (!project?.id || !project?.name) {
+      throw new Error('Resposta da Vercel sem id ou nome do projeto.');
+    }
+
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      teamId,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/repo|repository|not found|link|connect|github/i.test(msg)) {
+      throw new Error(
+        `${msg} Conecte a conta GitHub à Vercel em vercel.com/account e confirme que o repositório "${repoFullName}" existe e está acessível.`
+      );
+    }
+    throw err;
   }
-
-  return {
-    projectId: project.id,
-    projectName: project.name,
-    teamId,
-  };
 }
 
 /**

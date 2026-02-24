@@ -722,21 +722,52 @@ export async function POST(req: Request) {
 
       console.log('[provision] 📍 Step 11/12: Triggering redeploy...');
       let redeploy: { deploymentId?: string };
+      const isNoDeployment = (e: unknown) =>
+        (e instanceof Error && e.message.includes('Nenhum deployment encontrado')) ||
+        (typeof e === 'object' && e !== null && String((e as { message?: string }).message || '').includes('Nenhum deployment'));
+
       try {
         redeploy = await triggerProjectRedeploy(vercel.token, vercelProject.projectId, vercelProject.teamId);
-      } catch (err) {
-        try {
-          console.warn('[provision] ⚠️ Redeploy falhou, reabilitando installer...');
-          await upsertProjectEnvs(
-            vercel.token,
-            vercelProject.projectId,
-            [{ key: 'INSTALLER_ENABLED', value: 'true', targets: ['production', 'preview'] }],
-            vercelProject.teamId
-          );
-        } catch (rollbackErr) {
-          console.error('[provision] ❌ Falha ao reabilitar installer após erro no redeploy:', rollbackErr);
+      } catch (firstErr) {
+        if (isNoDeployment(firstErr)) {
+          console.log('[provision] 📍 Step 11/12: Projeto novo sem deployment; aguardando 25s (Vercel pode iniciar o primeiro deploy)...');
+          await sendEvent({
+            type: 'progress',
+            progress: calculateProgress(stepIndex, 0.5),
+            title: step11.title,
+            subtitle: 'Aguardando primeiro deploy do repositório...',
+          });
+          await new Promise((r) => setTimeout(r, 25_000));
+          try {
+            redeploy = await triggerProjectRedeploy(vercel.token, vercelProject.projectId, vercelProject.teamId);
+          } catch (retryErr) {
+            try {
+              await upsertProjectEnvs(
+                vercel.token,
+                vercelProject.projectId,
+                [{ key: 'INSTALLER_ENABLED', value: 'true', targets: ['production', 'preview'] }],
+                vercelProject.teamId
+              );
+            } catch (rollbackErr) {
+              console.error('[provision] ❌ Falha ao reabilitar installer:', rollbackErr);
+            }
+            throw new Error(
+              'O projeto foi criado na Vercel mas ainda não há deployment. Acesse vercel.com/dashboard, abra o projeto e dispare o primeiro deploy (Deploy → Redeploy), ou aguarde 2–3 minutos e clique em "Tentar novamente" no passo Vercel.'
+            );
+          }
+        } else {
+          try {
+            await upsertProjectEnvs(
+              vercel.token,
+              vercelProject.projectId,
+              [{ key: 'INSTALLER_ENABLED', value: 'true', targets: ['production', 'preview'] }],
+              vercelProject.teamId
+            );
+          } catch (rollbackErr) {
+            console.error('[provision] ❌ Falha ao reabilitar installer:', rollbackErr);
+          }
+          throw firstErr;
         }
-        throw err;
       }
       console.log('[provision] ✅ Step 11/12: Redeploy triggered', { deploymentId: redeploy.deploymentId });
       stepIndex++;
