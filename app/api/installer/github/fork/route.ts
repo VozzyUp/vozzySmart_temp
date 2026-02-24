@@ -146,26 +146,8 @@ export async function POST(req: NextRequest) {
         );
       }
       if (forkRes.status === 422 || msg.includes('already exists') || msg.includes('fork already exists')) {
-        // Fork já existe ou nome já usado - buscar repositório do usuário com o nome informado
-        const repoRes = await fetch(
-          `${GITHUB_API}/repos/${resolvedUsername}/${normalizedRepoName}`,
-          {
-            headers: {
-              Authorization: `Bearer ${tokenTrimmed}`,
-              ...GITHUB_HEADERS,
-            },
-          }
-        );
-        if (repoRes.ok) {
-          const repo = (await repoRes.json()) as { html_url?: string; clone_url?: string; full_name?: string };
-          return NextResponse.json({
-            success: true,
-            forkUrl: repo.html_url,
-            cloneUrl: repo.clone_url,
-            fullName: repo.full_name,
-            alreadyExisted: true,
-          });
-        }
+        // Para cada cliente queremos SEMPRE um repositório/fork NOVO.
+        // Se já existe um repo com esse nome na conta do usuário, forçamos o usuário a escolher outro nome.
         return NextResponse.json(
           { error: 'Já existe um repositório com esse nome na sua conta GitHub. Escolha outro nome.' },
           { status: 400 }
