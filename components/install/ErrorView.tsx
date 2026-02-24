@@ -15,6 +15,7 @@ interface ErrorViewProps {
   returnToStep: InstallStep;
   onRetry: () => void;
   onGoToStep: (step: InstallStep) => void;
+  onReset: () => void;
 }
 
 const STEP_NAMES: Record<InstallStep, string> = {
@@ -31,7 +32,7 @@ const STEP_NAMES: Record<InstallStep, string> = {
  * View de erro durante o provisioning.
  * Tema Blade Runner - "Falha de Replicação"
  */
-export function ErrorView({ error, errorDetails, returnToStep, onRetry, onGoToStep }: ErrorViewProps) {
+export function ErrorView({ error, errorDetails, returnToStep, onRetry, onGoToStep, onReset }: ErrorViewProps) {
   // Som de erro ao montar
   useEffect(() => {
     playError();
@@ -84,31 +85,40 @@ export function ErrorView({ error, errorDetails, returnToStep, onRetry, onGoToSt
         </p>
 
         {/* Actions */}
-        <div className="flex gap-3 mt-8 w-full">
-          <Button
-            variant="outline"
-            className={cn(
-              'flex-1 font-mono uppercase text-xs',
-              'border-[var(--br-dust-gray)] hover:border-[var(--br-neon-cyan)]',
-              'text-[var(--br-muted-cyan)] hover:text-[var(--br-neon-cyan)]',
-              'transition-all duration-200'
-            )}
-            onClick={() => onGoToStep(returnToStep)}
+        <div className="flex flex-col gap-3 mt-8 w-full">
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className={cn(
+                'flex-1 font-mono uppercase text-xs',
+                'border-[var(--br-dust-gray)] hover:border-[var(--br-neon-cyan)]',
+                'text-[var(--br-muted-cyan)] hover:text-[var(--br-neon-cyan)]',
+                'transition-all duration-200'
+              )}
+              onClick={() => onGoToStep(returnToStep)}
+            >
+              Corrigir {STEP_NAMES[returnToStep]}
+            </Button>
+            <Button
+              className={cn(
+                'flex-1 font-mono uppercase text-xs',
+                'bg-[var(--br-neon-cyan)] hover:bg-[var(--br-neon-cyan)]/80',
+                'text-[var(--br-void-black)] font-bold',
+                'shadow-[0_0_15px_var(--br-neon-cyan)/0.4]',
+                'transition-all duration-200'
+              )}
+              onClick={onRetry}
+            >
+              Reiniciar Incubação
+            </Button>
+          </div>
+          <button
+            type="button"
+            onClick={onReset}
+            className="text-[10px] font-mono text-[var(--br-dust-gray)] hover:text-[var(--br-neon-cyan)] underline-offset-4 hover:underline"
           >
-            Corrigir {STEP_NAMES[returnToStep]}
-          </Button>
-          <Button
-            className={cn(
-              'flex-1 font-mono uppercase text-xs',
-              'bg-[var(--br-neon-cyan)] hover:bg-[var(--br-neon-cyan)]/80',
-              'text-[var(--br-void-black)] font-bold',
-              'shadow-[0_0_15px_var(--br-neon-cyan)/0.4]',
-              'transition-all duration-200'
-            )}
-            onClick={onRetry}
-          >
-            Reiniciar Incubação
-          </Button>
+            Reiniciar instalação do zero
+          </button>
         </div>
       </div>
     </StepCard>

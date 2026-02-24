@@ -217,6 +217,15 @@ function InstallPageContent() {
             </StepCard>
           </motion.div>
         </AnimatePresence>
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="text-xs font-mono text-[var(--br-dust-gray)] hover:text-[var(--br-neon-cyan)] underline-offset-4 hover:underline"
+          >
+            Reiniciar instalação do zero
+          </button>
+        </div>
       </InstallLayout>
     );
   }
@@ -253,6 +262,7 @@ function InstallPageContent() {
           onRetry={handleRetry}
           onGoToStep={handleGoToStep}
           returnToStep={state.returnToStep}
+          onReset={handleReset}
         />
       </InstallLayout>
     );
