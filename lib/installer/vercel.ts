@@ -413,10 +413,13 @@ export async function createVercelProjectFromRepo(
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/repo|repository|not found|link|connect|github/i.test(msg)) {
-      throw new Error(
-        `${msg} Conecte a conta GitHub à Vercel em vercel.com/account e confirme que o repositório "${repoFullName}" existe e está acessível.`
-      );
+    const needLoginConnection = /login connection|add a login connection/i.test(msg);
+    const needConnect = /repo|repository|not found|link|connect|github|failed to link/i.test(msg);
+    if (needLoginConnection || needConnect) {
+      const hint = needLoginConnection
+        ? 'É necessário conectar sua conta GitHub à sua conta Vercel primeiro: acesse vercel.com/account (ou vercel.com/integrations/git/github), clique em "Connect GitHub" e autorize. Depois tente o provisionamento novamente.'
+        : `Conecte a conta GitHub à Vercel em vercel.com/account e confirme que o repositório "${repoFullName}" existe e está acessível.`;
+      throw new Error(`${msg} ${hint}`);
     }
     throw err;
   }

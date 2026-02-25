@@ -101,48 +101,44 @@ export function VercelForm({ data, onComplete, onBack, showBack }: FormProps) {
           </p>
         </div>
 
-        {/* Instruções principais */}
+        {/* Instruções principais - Login Connection na Vercel é obrigatório */}
         <div className="p-4 rounded-xl bg-[var(--br-neon-cyan)]/10 border border-[var(--br-neon-cyan)]/30 space-y-3">
           <h4 className="font-medium text-[var(--br-neon-cyan)] flex items-center gap-2">
             <span className="w-5 h-5 rounded-full bg-[var(--br-neon-cyan)]/20 flex items-center justify-center text-xs">
               1
             </span>
-            Conectar GitHub ao painel da Vercel
+            Conectar sua conta GitHub à sua conta Vercel
           </h4>
+          <p className="text-xs text-[var(--br-muted-cyan)]">
+            A Vercel precisa ter uma &quot;Login Connection&quot; com seu GitHub para conseguir criar o projeto e fazer o deploy. Faça isso pela conta Vercel:
+          </p>
           <ol className="text-xs md:text-sm font-mono text-[var(--br-muted-cyan)] space-y-2 list-decimal list-inside">
             <li>
-              Clique no botão{' '}
-              <strong className="text-[var(--br-hologram-white)]">\"Abrir GitHub\"</strong> abaixo.
+              Clique em <strong className="text-[var(--br-hologram-white)]">&quot;Abrir Vercel – Conectar GitHub&quot;</strong> abaixo (abre a página oficial da Vercel).
             </li>
             <li>
-              Na página do GitHub, escolha onde instalar o app{' '}
-              <strong className="text-[var(--br-hologram-white)]">Vercel</strong> (sua conta ou
-              organização).
+              Na Vercel, clique em <strong className="text-[var(--br-hologram-white)]">Connect GitHub</strong> e autorize com a mesma conta GitHub onde está o fork.
             </li>
             <li>
-              Selecione <strong className="text-[var(--br-hologram-white)]">All repositories</strong>{' '}
-              ou inclua o fork criado para o SmartZap.
+              Se o GitHub pedir, escolha <strong className="text-[var(--br-hologram-white)]">All repositories</strong> ou inclua o repositório do SmartZap.
             </li>
             <li>
-              Clique em <strong className="text-[var(--br-hologram-white)]">Install</strong> /
-              <strong className="text-[var(--br-hologram-white)]"> Authorize</strong> e aguarde a
-              conclusão.
+              Clique em <strong className="text-[var(--br-hologram-white)]">Install</strong> / <strong className="text-[var(--br-hologram-white)]">Authorize</strong> e volte aqui.
             </li>
           </ol>
 
           <a
-            href="https://github.com/apps/vercel/installations/new"
+            href="https://vercel.com/integrations/git/github"
             target="_blank"
             rel="noopener noreferrer"
             className="mt-2 inline-flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg bg-[var(--br-neon-cyan)] text-[var(--br-void-black)] font-mono text-sm uppercase tracking-wider hover:bg-[var(--br-neon-cyan)]/90 transition-colors"
           >
             <ExternalLink className="w-4 h-4" />
-            Abrir GitHub para autorizar Vercel
+            Abrir Vercel – Conectar GitHub
           </a>
 
           <p className="text-[10px] text-[var(--br-dust-gray)] mt-2 text-center">
-            Deixe esta janela aberta enquanto conclui a autorização no GitHub. Em seguida, volte
-            aqui e confirme abaixo.
+            Deixe esta janela aberta, conclua a conexão na Vercel e no GitHub e depois confirme abaixo.
           </p>
         </div>
 
@@ -158,8 +154,7 @@ export function VercelForm({ data, onComplete, onBack, showBack }: FormProps) {
             htmlFor="confirm-vercel-github"
             className="text-sm text-[var(--br-hologram-white)] cursor-pointer select-none leading-relaxed"
           >
-            Confirmo que cliquei em <strong>\"Install\"</strong> na tela do GitHub App da Vercel e
-            autorizei o acesso aos repositórios.
+            Confirmo que conectei minha conta GitHub à Vercel (Connect GitHub) e autorizei o acesso aos repositórios.
           </label>
         </div>
 
