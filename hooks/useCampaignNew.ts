@@ -17,7 +17,7 @@ import { useExchangeRate } from '@/hooks/useExchangeRate'
 import { useCampaignFolders } from '@/hooks/useCampaignFolders'
 
 // ── Constants ──────────────────────────────────────────────────────────
-const MAX_TAG_CHIPS = 10
+const MAX_TAG_CHIPS = 30
 
 // ── Types ──────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parsePhoneNumber } from 'libphonenumber-js'
-import { supabase } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizePhoneNumber } from '@/lib/phone-formatter'
 import { requireSessionOrApiKey } from '@/lib/request-auth'
 
@@ -32,15 +32,33 @@ export async function GET(request: NextRequest) {
     const auth = await requireSessionOrApiKey(request)
     if (auth) return auth
 
-    const { data, error } = await supabase.from('contacts').select('phone')
-    if (error) throw error
+    const supabase = getSupabaseAdmin()
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase não configurado' }, { status: 503 })
+    }
 
+    const PAGE_SIZE = 1000
     const counts: Record<string, number> = {}
-    ;(data || []).forEach((row) => {
-      const code = resolveCountry(String(row.phone || ''))
-      if (!code) return
-      counts[code] = (counts[code] || 0) + 1
-    })
+    let from = 0
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('phone')
+        .order('id')
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw error
+
+      const rows = data || []
+      rows.forEach((row) => {
+        const code = resolveCountry(String(row.phone || ''))
+        if (!code) return
+        counts[code] = (counts[code] || 0) + 1
+      })
+
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
 
     const result: CountryCount[] = Object.entries(counts)
       .map(([code, count]) => ({ code, count }))
