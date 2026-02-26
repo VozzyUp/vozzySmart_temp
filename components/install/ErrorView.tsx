@@ -31,11 +31,13 @@ const STEP_NAMES: Record<InstallStep, string> = {
 
 // Nomes legíveis dos serviços para alunos
 const STEP_SERVICES: Record<InstallStep, string> = {
-  1: 'suas credenciais',
-  2: 'token Vercel',
-  3: 'token Supabase',
-  4: 'token QStash',
-  5: 'credenciais Redis',
+  1: 'Licença',
+  2: 'GitHub',
+  3: 'Identidade',
+  4: 'Link Neural',
+  5: 'Memória Base',
+  6: 'Transmissão',
+  7: 'Cache',
 };
 
 // Dica de ação por tipo de erro

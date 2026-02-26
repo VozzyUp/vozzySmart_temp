@@ -21,6 +21,7 @@
 
 import { z } from 'zod';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { fetchWithTimeout } from '@/lib/installer/fetch-with-timeout';
 import { runSchemaMigration, checkSchemaApplied } from '@/lib/installer/migrations';
 import { bootstrapInstance } from '@/lib/installer/bootstrap';
 import { triggerProjectRedeploy, upsertProjectEnvs, waitForVercelDeploymentReady, disableDeploymentProtection, createVercelProjectFromRepo } from '@/lib/installer/vercel';
