@@ -3,7 +3,7 @@
  * Orchestrates conversations, messages, labels, and quick replies
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useConversations, useConversationMutations } from './useConversations'
@@ -12,6 +12,7 @@ import { useLabels } from './useLabels'
 import { useQuickReplies } from './useQuickReplies'
 import { useInboxSettings, getHumanModeTimeoutMs } from './useInboxSettings'
 import { aiAgentService, type UpdateAIAgentParams } from '@/services/aiAgentService'
+import { inboxService } from '@/services/inboxService'
 import type { ConversationStatus, ConversationMode, ConversationPriority, AIAgent, InboxConversation, InboxLabel, InboxQuickReply } from '@/types'
 
 export interface InboxInitialData {
@@ -39,7 +40,12 @@ export function useInbox(options: UseInboxOptions = {}) {
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | null>(null)
   const [modeFilter, setModeFilter] = useState<ConversationMode | null>(null)
   const [labelFilter, setLabelFilter] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
+
+  // Pagination state for extra pages (page 1 is always handled by useConversations + realtime)
+  const [extraConversations, setExtraConversations] = useState<InboxConversation[]>([])
+  const [nextPageToLoad, setNextPageToLoad] = useState(2)
+  const [hasMoreConversations, setHasMoreConversations] = useState(true)
+  const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false)
 
   // Selected conversation ID (from URL or state)
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -54,22 +60,89 @@ export function useInbox(options: UseInboxOptions = {}) {
     }
   }, [searchParams])
 
-  // Conversations list
+  // Conversations list — always page 1 so realtime subscription stays active
   const {
     conversations,
-    total,
-    totalPages,
     totalUnread,
     isLoading: isLoadingConversations,
-    hasNextPage,
+    hasNextPage: page1HasNextPage,
   } = useConversations({
-    page,
+    page: 1,
+    limit: 50,
     status: statusFilter ?? undefined,
     mode: modeFilter ?? undefined,
     labelId: labelFilter ?? undefined,
     search: search || undefined,
     initialData: options.initialData?.conversations,
   })
+
+  // Reset extra pages whenever filters/search change
+  const prevFiltersRef = useRef({ search, statusFilter, modeFilter, labelFilter })
+  useEffect(() => {
+    const prev = prevFiltersRef.current
+    if (
+      prev.search !== search ||
+      prev.statusFilter !== statusFilter ||
+      prev.modeFilter !== modeFilter ||
+      prev.labelFilter !== labelFilter
+    ) {
+      prevFiltersRef.current = { search, statusFilter, modeFilter, labelFilter }
+      setExtraConversations([])
+      setNextPageToLoad(2)
+      setHasMoreConversations(true)
+    }
+  }, [search, statusFilter, modeFilter, labelFilter])
+
+  // Merge page 1 (always fresh/realtime) with extra pages (deduped)
+  const allConversations = useMemo(() => {
+    if (extraConversations.length === 0) return conversations
+    const page1Ids = new Set(conversations.map((c) => c.id))
+    const filteredExtras = extraConversations.filter((c) => !page1Ids.has(c.id))
+    return [...conversations, ...filteredExtras]
+  }, [conversations, extraConversations])
+
+  // Load next page of conversations
+  const loadMoreConversations = useCallback(async () => {
+    if (isLoadingMoreConversations || !hasMoreConversations) return
+    if (!page1HasNextPage && nextPageToLoad === 2) return
+
+    setIsLoadingMoreConversations(true)
+    try {
+      const result = await inboxService.listConversations({
+        page: nextPageToLoad,
+        limit: 50,
+        status: statusFilter ?? undefined,
+        mode: modeFilter ?? undefined,
+        labelId: labelFilter ?? undefined,
+        search: search || undefined,
+      })
+
+      const hasMore = result.page < result.totalPages
+      setHasMoreConversations(hasMore)
+      setNextPageToLoad((p) => p + 1)
+
+      if (result.conversations.length > 0) {
+        setExtraConversations((prev) => {
+          const existingIds = new Set(prev.map((c) => c.id))
+          const newOnes = result.conversations.filter((c) => !existingIds.has(c.id))
+          return [...prev, ...newOnes]
+        })
+      }
+    } catch (error) {
+      console.error('[useInbox] loadMoreConversations error:', error)
+    } finally {
+      setIsLoadingMoreConversations(false)
+    }
+  }, [
+    isLoadingMoreConversations,
+    hasMoreConversations,
+    page1HasNextPage,
+    nextPageToLoad,
+    statusFilter,
+    modeFilter,
+    labelFilter,
+    search,
+  ])
 
   // Conversation mutations
   const conversationMutations = useConversationMutations()
@@ -260,14 +333,12 @@ export function useInbox(options: UseInboxOptions = {}) {
 
   return {
     // Conversations
-    conversations,
-    total,
-    totalPages,
+    conversations: allConversations,
     totalUnread,
     isLoadingConversations,
-    page,
-    setPage,
-    hasNextPage,
+    hasMoreConversations: hasMoreConversations && (page1HasNextPage || nextPageToLoad > 2),
+    isLoadingMoreConversations,
+    loadMoreConversations,
 
     // Selected conversation
     selectedConversationId: selectedId,

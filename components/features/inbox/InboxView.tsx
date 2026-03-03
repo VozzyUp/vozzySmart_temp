@@ -72,6 +72,11 @@ export interface InboxViewProps {
   labelFilter: string | null
   onLabelFilterChange: (labelId: string | null) => void
 
+  // Conversation list pagination
+  hasMoreConversations?: boolean
+  isLoadingMoreConversations?: boolean
+  onLoadMoreConversations?: () => void
+
   // Conversation actions
   onModeToggle: () => void
   onCloseConversation: () => void
@@ -119,6 +124,9 @@ export function InboxView({
   onModeFilterChange,
   labelFilter,
   onLabelFilterChange,
+  hasMoreConversations,
+  isLoadingMoreConversations,
+  onLoadMoreConversations,
   onModeToggle,
   onCloseConversation,
   onReopenConversation,
@@ -204,6 +212,9 @@ export function InboxView({
                   onModeFilterChange={onModeFilterChange}
                   labelFilter={labelFilter}
                   onLabelFilterChange={onLabelFilterChange}
+                  hasMore={hasMoreConversations}
+                  isLoadingMore={isLoadingMoreConversations}
+                  onLoadMore={onLoadMoreConversations}
                 />
               </ErrorBoundary>
             </div>

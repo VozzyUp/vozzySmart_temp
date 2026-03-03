@@ -21,7 +21,7 @@ export const getInboxInitialData = cache(async (): Promise<InboxInitialData> => 
 
   // Buscar tudo em paralelo
   const [conversationsResult, labelsResult, quickRepliesResult] = await Promise.all([
-    // Conversas recentes (últimas 50)
+    // Conversas recentes (últimas 100)
     supabase
       .from('inbox_conversations')
       .select(`
@@ -32,7 +32,7 @@ export const getInboxInitialData = cache(async (): Promise<InboxInitialData> => 
         )
       `)
       .order('last_message_at', { ascending: false })
-      .limit(50),
+      .limit(100),
 
     // Labels
     supabase

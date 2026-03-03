@@ -62,6 +62,10 @@ export function InboxClientWrapper({ initialData, initialConversationId }: Inbox
         onModeFilterChange={inbox.onModeFilterChange}
         labelFilter={inbox.labelFilter}
         onLabelFilterChange={inbox.onLabelFilterChange}
+        // Conversation list pagination
+        hasMoreConversations={inbox.hasMoreConversations}
+        isLoadingMoreConversations={inbox.isLoadingMoreConversations}
+        onLoadMoreConversations={inbox.loadMoreConversations}
         // Conversation actions
         onModeToggle={inbox.onModeToggle}
         onCloseConversation={inbox.onCloseConversation}

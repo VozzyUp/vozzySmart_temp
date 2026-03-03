@@ -10,8 +10,8 @@
  * - Clean filter UI
  */
 
-import React, { useState, useMemo } from 'react'
-import { Search, SlidersHorizontal, Bot, User, X, Inbox } from 'lucide-react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
+import { Search, SlidersHorizontal, Bot, User, X, Inbox, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import {
@@ -44,6 +44,11 @@ export interface ConversationListProps {
   onModeFilterChange: (mode: ConversationMode | null) => void
   labelFilter: string | null
   onLabelFilterChange: (labelId: string | null) => void
+
+  // Infinite scroll
+  hasMore?: boolean
+  isLoadingMore?: boolean
+  onLoadMore?: () => void
 }
 
 export function ConversationList({
@@ -61,8 +66,31 @@ export function ConversationList({
   onModeFilterChange,
   labelFilter,
   onLabelFilterChange,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore,
 }: ConversationListProps) {
   const [showFilters, setShowFilters] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    if (!onLoadMore || !hasMore) return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !isLoadingMore) {
+          onLoadMore()
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [onLoadMore, hasMore, isLoadingMore])
 
   // Active filter count
   const activeFilterCount = useMemo(() => {
@@ -282,6 +310,12 @@ export function ConversationList({
                 onClick={() => onSelect(conversation.id)}
               />
             ))}
+            {/* Sentinel for infinite scroll */}
+            {(hasMore || isLoadingMore) && (
+              <div ref={sentinelRef} className="flex items-center justify-center py-3">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--ds-text-muted)]" />
+              </div>
+            )}
           </div>
         )}
       </div>
