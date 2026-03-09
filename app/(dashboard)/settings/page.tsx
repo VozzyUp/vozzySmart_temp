@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Script from 'next/script'
 import { useSettingsController } from '@/hooks/useSettings'
 import { SettingsView } from '@/components/features/settings/SettingsView'
 import { SetupWizardView } from '@/components/features/settings/SetupWizardView'
@@ -35,6 +36,21 @@ export default function SettingsPage() {
 
   return (
     <Page>
+      {/* Meta FB JS SDK — carregado apenas na página de configurações para o Embedded Signup de Coexistência */}
+      <Script
+        src="https://connect.facebook.net/pt_BR/sdk.js"
+        strategy="lazyOnload"
+        onLoad={() => {
+          if (typeof window !== 'undefined' && (window as any).FB) {
+            ;(window as any).FB.init({
+              appId: process.env.NEXT_PUBLIC_META_APP_ID || '',
+              autoLogAppEvents: true,
+              xfbml: false,
+              version: 'v21.0',
+            })
+          }
+        }}
+      />
       <PageHeader>
         <div>
           <PageTitle>Configurações</PageTitle>
@@ -120,6 +136,13 @@ export default function SettingsPage() {
             saveUpstashConfig={controller.saveUpstashConfig}
             removeUpstashConfig={controller.removeUpstashConfig}
             isSavingUpstashConfig={controller.isSavingUpstashConfig}
+
+            // Coexistência
+            coexistenceEnabled={controller.coexistenceEnabled}
+            coexistenceLoading={controller.coexistenceLoading}
+            isConnectingCoexistence={controller.isConnectingCoexistence}
+            onConnectCoexistence={controller.connectCoexistence}
+            onRefreshCoexistenceStatus={controller.refreshCoexistenceStatus}
             hideHeader
           />
         </div>

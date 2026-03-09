@@ -937,6 +937,51 @@ export async function POST(request: NextRequest) {
         }
 
         // =====================================================================
+        // Coexistência: message_echoes / smb_message_echoes
+        // Mensagens enviadas pelo WhatsApp Business App aparecem como echoes.
+        // Persistimos como outbound no inbox para manter histórico completo.
+        // =====================================================================
+        const echoMessages: any[] = change.value?.message_echoes || change.value?.smb_message_echoes || []
+        for (const echo of echoMessages) {
+          try {
+            const echoFrom: string = echo.to || echo.from || ''
+            const echoText: string = echo.text?.body || `[${echo.type || 'echo'}]`
+            const echoType: string = echo.type || 'text'
+            const phoneNumberId = change?.value?.metadata?.phone_number_id || null
+            const normalizedEchoPhone = normalizePhoneNumber(echoFrom)
+
+            if (!normalizedEchoPhone) continue
+
+            const { findConversationByPhoneLightweight, inboxDb } = await import('@/lib/inbox/inbox-db')
+            const echoConversation = await findConversationByPhoneLightweight(normalizedEchoPhone)
+
+            if (echoConversation) {
+              await inboxDb.createMessage({
+                conversation_id: echoConversation.id,
+                direction: 'outbound',
+                content: echoText,
+                message_type: echoType === 'image' ? 'image'
+                  : echoType === 'audio' ? 'audio'
+                  : echoType === 'video' ? 'video'
+                  : echoType === 'document' ? 'document'
+                  : 'text',
+                whatsapp_message_id: echo.id || undefined,
+                delivery_status: 'sent',
+                payload: {
+                  source: 'coexistence_echo',
+                  raw_type: echoType,
+                  timestamp: echo.timestamp,
+                  phone_number_id: phoneNumberId,
+                },
+              })
+              console.log(`🔄 Coexistência echo: conversa=${echoConversation.id}, tipo=${echoType}`)
+            }
+          } catch (echoError) {
+            console.warn('[Webhook] Falha ao processar message echo de coexistência (best-effort):', echoError)
+          }
+        }
+
+        // =====================================================================
         // Process incoming messages (Chatbot Engine Disabled in Template)
         // =====================================================================
         const messages = change.value?.messages || []

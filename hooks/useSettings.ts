@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { settingsService } from '../services/settingsService';
@@ -76,6 +76,9 @@ export const useSettingsController = () => {
   // Account Health State
   const [accountHealth, setAccountHealth] = useState<AccountHealth | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+
+  // Coexistence State
+  const [isConnectingCoexistence, setIsConnectingCoexistence] = useState(false);
 
   // Connection test state (Settings -> Configuração da API)
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -624,6 +627,62 @@ export const useSettingsController = () => {
     return quickHealthCheck();
   };
 
+  // Coexistence status query
+  const coexistenceQuery = useQuery({
+    queryKey: ['coexistenceStatus'],
+    queryFn: async (): Promise<{ ok: boolean; coexistenceEnabled: boolean }> => {
+      const response = await fetch('/api/meta/coexistence/status');
+      if (!response.ok) return { ok: false, coexistenceEnabled: false };
+      return response.json();
+    },
+    enabled: !!settingsData?.isConnected,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  // Connect coexistence via Embedded Signup callback
+  const handleConnectCoexistence = useCallback(
+    async (params: { code: string; phone_number_id: string; waba_id: string }) => {
+      setIsConnectingCoexistence(true);
+      try {
+        const response = await fetch('/api/meta/coexistence/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(params),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || 'Erro ao conectar coexistência');
+        }
+
+        // Refresh settings and coexistence status
+        queryClient.invalidateQueries({ queryKey: ['allSettings'] });
+        queryClient.invalidateQueries({ queryKey: ['coexistenceStatus'] });
+        queryClient.invalidateQueries({ queryKey: ['metaWebhookSubscription'] });
+
+        toast.success('Coexistência ativada com sucesso!', {
+          description: 'Seu WhatsApp Business App e a API agora funcionam juntos.',
+        });
+
+        return data;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Erro ao conectar coexistência';
+        toast.error('Falha ao conectar coexistência', { description: message });
+        throw err;
+      } finally {
+        setIsConnectingCoexistence(false);
+      }
+    },
+    [queryClient]
+  );
+
+  // Refresh coexistence status
+  const refreshCoexistenceStatus = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['coexistenceStatus'] });
+  }, [queryClient]);
+
   // Set webhook override for a phone number
   const setWebhookOverride = async (phoneNumberId: string, callbackUrl: string): Promise<boolean> => {
     try {
@@ -856,6 +915,13 @@ export const useSettingsController = () => {
     saveUpstashConfig: saveUpstashConfigMutation.mutateAsync,
     removeUpstashConfig: removeUpstashConfigMutation.mutateAsync,
     isSavingUpstashConfig: saveUpstashConfigMutation.isPending,
+
+    // Coexistência WhatsApp + Meta Embedded Signup
+    coexistenceEnabled: coexistenceQuery.data?.coexistenceEnabled ?? false,
+    coexistenceLoading: coexistenceQuery.isLoading,
+    isConnectingCoexistence,
+    connectCoexistence: handleConnectCoexistence,
+    refreshCoexistenceStatus,
 
   };
 };  

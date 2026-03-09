@@ -10,6 +10,7 @@ import { FlowEndpointPanel } from './FlowEndpointPanel';
 import { CredentialsForm } from './CredentialsForm';
 import { UpstashConfigPanel } from './UpstashConfigPanel';
 import { ApiDocsPanel } from './ApiDocsPanel';
+import { CoexistenceSection } from './CoexistenceSection';
 import { useDevMode } from '@/components/providers/DevModeProvider';
 import type { SettingsViewProps } from './types';
 
@@ -92,6 +93,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   removeUpstashConfig,
   isSavingUpstashConfig,
 
+  // Coexistência
+  coexistenceEnabled,
+  coexistenceLoading,
+  isConnectingCoexistence,
+  onConnectCoexistence,
+  onRefreshCoexistenceStatus,
+
 }) => {
   // Dev mode hook
   const { isDevMode } = useDevMode();
@@ -140,7 +148,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           onDisconnect={onDisconnect}
           isEditing={isEditing}
           onToggleEdit={() => setIsEditing((v) => !v)}
+          coexistenceEnabled={coexistenceEnabled}
         />
+
+        {/* Coexistence Section — visible when connected */}
+        {settings.isConnected && onConnectCoexistence && (
+          <CoexistenceSection
+            coexistenceEnabled={coexistenceEnabled ?? false}
+            coexistenceLoading={coexistenceLoading ?? false}
+            isConnectingCoexistence={isConnectingCoexistence ?? false}
+            onConnect={onConnectCoexistence}
+            onRefreshStatus={onRefreshCoexistenceStatus ?? (() => {})}
+          />
+        )}
 
         {/* Credentials Form - Only visible if disconnected OR editing */}
         {(!settings.isConnected || isEditing) && (

@@ -370,17 +370,6 @@ export function DashboardShell({
         return 'App'
     }
 
-    // Show onboarding overlay if setup is needed
-    if (needsSetup) {
-        return (
-            <OnboardingOverlay
-                health={healthStatus || null}
-                isLoading={isHealthFetching}
-                onRefresh={() => refetchHealth()}
-            />
-        )
-    }
-
     // Determina se deve mostrar o modal de onboarding do WhatsApp
     // Mostra quando: infra OK E onboarding não marcado como completo no banco
     // Só mostra modal de onboarding após carregar status do banco (evita flash)
@@ -395,6 +384,7 @@ export function DashboardShell({
     const isInboxRoute = pathname?.startsWith('/inbox') ?? false
 
     // Sidebar component props - memoized to prevent DashboardSidebar re-renders
+    // IMPORTANTE: deve estar antes de qualquer early return para não violar regras de hooks
     const sidebarProps = useMemo(() => ({
         pathname,
         navItems: navItems as NavItem[],
@@ -418,6 +408,18 @@ export function DashboardShell({
         handleLogout,
         prefetchRoute,
     ])
+
+    // Show onboarding overlay if setup is needed
+    // IMPORTANTE: este early return deve vir DEPOIS de todos os hooks (useMemo, useCallback, etc.)
+    if (needsSetup) {
+        return (
+            <OnboardingOverlay
+                health={healthStatus || null}
+                isLoading={isHealthFetching}
+                onRefresh={() => refetchHealth()}
+            />
+        )
+    }
 
     if (isBuilderRoute) {
         return (

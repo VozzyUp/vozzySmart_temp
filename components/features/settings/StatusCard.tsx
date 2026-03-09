@@ -1,7 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
-import { Wifi, AlertTriangle, RefreshCw, AlertCircle, Shield, Edit2 } from 'lucide-react';
+import { Wifi, AlertTriangle, RefreshCw, AlertCircle, Shield, Edit2, Smartphone } from 'lucide-react';
 import { AccountLimits } from '../../../lib/meta-limits';
 import { Container } from '@/components/ui/container';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -21,6 +21,7 @@ export interface StatusCardProps {
   onDisconnect?: () => void;
   isEditing?: boolean;
   onToggleEdit?: () => void;
+  coexistenceEnabled?: boolean;
 }
 
 export const StatusCard = forwardRef<HTMLDivElement, StatusCardProps>(function StatusCard(
@@ -34,6 +35,7 @@ export const StatusCard = forwardRef<HTMLDivElement, StatusCardProps>(function S
     onDisconnect,
     isEditing,
     onToggleEdit,
+    coexistenceEnabled,
   },
   ref
 ) {
@@ -113,6 +115,14 @@ export const StatusCard = forwardRef<HTMLDivElement, StatusCardProps>(function S
                 }`}>
                 <Shield size={12} />
                 Qualidade: {accountLimits?.qualityScore === 'GREEN' ? 'Alta' : accountLimits?.qualityScore === 'YELLOW' ? 'Média' : accountLimits?.qualityScore === 'RED' ? 'Baixa' : '---'}
+              </span>
+            )}
+
+            {/* Coexistence Badge */}
+            {coexistenceEnabled && (
+              <span className="px-3 py-1.5 bg-blue-500/10 rounded-lg text-xs font-medium text-blue-400 border border-blue-500/20 flex items-center gap-1.5">
+                <Smartphone size={12} />
+                Coexistência Ativa
               </span>
             )}
           </div>

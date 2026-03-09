@@ -233,4 +233,11 @@ export interface SettingsViewProps {
   saveUpstashConfig?: (config: { email: string; apiKey: string }) => Promise<void>;
   removeUpstashConfig?: () => Promise<void>;
   isSavingUpstashConfig?: boolean;
+
+  // Coexistência
+  coexistenceEnabled?: boolean;
+  coexistenceLoading?: boolean;
+  isConnectingCoexistence?: boolean;
+  onConnectCoexistence?: (params: { code: string; phone_number_id: string; waba_id: string }) => Promise<void>;
+  onRefreshCoexistenceStatus?: () => void;
 }
