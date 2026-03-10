@@ -7,7 +7,7 @@
  * Permite usar o WhatsApp Business App e a Cloud API simultaneamente no mesmo número.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Smartphone,
   CheckCircle2,
@@ -51,8 +51,43 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
 
   const configId = process.env.NEXT_PUBLIC_META_COEXISTENCE_CONFIG_ID || '';
 
+  // Armazena phone_number_id e waba_id recebidos via evento message do iframe da Meta
+  const sessionDataRef = useRef<{ phone_number_id?: string; waba_id?: string }>({});
+
+  // Listener para o evento message enviado pela Meta quando o usuário conclui o fluxo
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== 'https://www.facebook.com' &&
+        event.origin !== 'https://web.facebook.com'
+      ) {
+        return;
+      }
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'WA_EMBEDDED_SIGNUP') {
+          if (data.event === 'FINISH') {
+            const { phone_number_id, waba_id } = data.data;
+            sessionDataRef.current = { phone_number_id, waba_id };
+          } else if (data.event === 'CANCEL') {
+            console.warn('[Coexistence] Fluxo cancelado na etapa:', data.data?.current_step);
+          } else if (data.event === 'ERROR') {
+            console.error('[Coexistence] Erro no fluxo:', data.data?.error_message);
+            setError(`Erro no fluxo Meta: ${data.data?.error_message || 'desconhecido'}`);
+          }
+        }
+      } catch {
+        // Mensagens não-JSON do iframe — ignorar
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const handleConnectClick = () => {
     setError(null);
+    sessionDataRef.current = {};
 
     if (!window.FB) {
       setError(
@@ -61,9 +96,9 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
       return;
     }
 
-    if (!process.env.NEXT_PUBLIC_META_APP_ID) {
+    if (!configId) {
       setError(
-        'NEXT_PUBLIC_META_APP_ID não está configurado. Adicione ao seu .env e reinicie o servidor.'
+        'NEXT_PUBLIC_META_COEXISTENCE_CONFIG_ID não está configurado. Adicione ao seu .env e reinicie o servidor.'
       );
       return;
     }
@@ -71,28 +106,18 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
     window.FB.login(
       (response) => {
         if (response.authResponse?.code) {
-          // The extras.setup param returns phone_number_id and waba_id in the response
-          // For coexistence flows, Meta returns these in the session info
           const code = response.authResponse.code;
+          // phone_number_id e waba_id chegam via evento 'message' (WA_EMBEDDED_SIGNUP/FINISH)
+          const { phone_number_id, waba_id } = sessionDataRef.current;
 
-          // Prompt user to enter the phone_number_id and waba_id
-          // (In production, these would be received via the callback URL)
-          // Here we trigger the connect API that handles the full flow
-          const phoneNumberId = prompt(
-            'Cole aqui o Phone Number ID retornado pelo Meta (visível no console do Facebook):',
-            ''
-          );
-          const wabaId = prompt(
-            'Cole aqui o WABA ID (Business Account ID) retornado pelo Meta:',
-            ''
-          );
-
-          if (!phoneNumberId || !wabaId) {
-            setError('Phone Number ID e WABA ID são obrigatórios para concluir a conexão.');
+          if (!phone_number_id || !waba_id) {
+            setError(
+              'Não foi possível obter os dados da conta WhatsApp. Por favor, complete todo o fluxo de configuração antes de fechar o popup.'
+            );
             return;
           }
 
-          onConnect({ code, phone_number_id: phoneNumberId, waba_id: wabaId }).catch((err) => {
+          onConnect({ code, phone_number_id, waba_id }).catch((err) => {
             setError(err instanceof Error ? err.message : 'Erro ao conectar coexistência');
           });
         } else {
@@ -105,11 +130,7 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
         config_id: configId,
         response_type: 'code',
         override_default_response_type: true,
-        extras: {
-          setup: {},
-          featureType: '',
-          sessionInfoVersion: '2',
-        },
+        extras: { version: 'v2-public-preview' },
       }
     );
   };
