@@ -937,11 +937,14 @@ export async function POST(request: NextRequest) {
         }
 
         // =====================================================================
-        // Coexistência: message_echoes / smb_message_echoes
+        // Coexistência: smb_message_echoes
         // Mensagens enviadas pelo WhatsApp Business App aparecem como echoes.
+        // O field identifier é 'smb_message_echoes', o array dentro de value é 'message_echoes'.
         // Persistimos como outbound no inbox para manter histórico completo.
         // =====================================================================
-        const echoMessages: any[] = change.value?.message_echoes || change.value?.smb_message_echoes || []
+        const echoMessages: any[] = change.field === 'smb_message_echoes'
+          ? (change.value?.message_echoes || [])
+          : []
         for (const echo of echoMessages) {
           try {
             const echoFrom: string = echo.to || echo.from || ''

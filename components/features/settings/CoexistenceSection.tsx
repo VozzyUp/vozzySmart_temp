@@ -51,8 +51,10 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
 
   const configId = process.env.NEXT_PUBLIC_META_COEXISTENCE_CONFIG_ID || '';
 
-  // Armazena phone_number_id e waba_id recebidos via evento message do iframe da Meta
-  const sessionDataRef = useRef<{ phone_number_id?: string; waba_id?: string }>({});
+  // Armazena waba_id recebido via evento message do iframe da Meta
+  // Para coexistência, o evento é FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING e só retorna waba_id
+  // O phone_number_id é resolvido pelo backend via /{waba_id}/phone_numbers
+  const sessionDataRef = useRef<{ waba_id?: string }>({});
 
   // Listener para o evento message enviado pela Meta quando o usuário conclui o fluxo
   useEffect(() => {
@@ -66,9 +68,12 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'WA_EMBEDDED_SIGNUP') {
-          if (data.event === 'FINISH') {
-            const { phone_number_id, waba_id } = data.data;
-            sessionDataRef.current = { phone_number_id, waba_id };
+          if (data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+            // Coexistência: apenas waba_id é retornado neste evento (phone_number_id vem do backend)
+            sessionDataRef.current = { waba_id: data.data?.waba_id };
+          } else if (data.event === 'FINISH') {
+            // Fallback para fluxo padrão (sem coexistência)
+            sessionDataRef.current = { waba_id: data.data?.waba_id };
           } else if (data.event === 'CANCEL') {
             console.warn('[Coexistence] Fluxo cancelado na etapa:', data.data?.current_step);
           } else if (data.event === 'ERROR') {
@@ -107,17 +112,17 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
       (response) => {
         if (response.authResponse?.code) {
           const code = response.authResponse.code;
-          // phone_number_id e waba_id chegam via evento 'message' (WA_EMBEDDED_SIGNUP/FINISH)
-          const { phone_number_id, waba_id } = sessionDataRef.current;
+          const { waba_id } = sessionDataRef.current;
 
-          if (!phone_number_id || !waba_id) {
+          if (!waba_id) {
             setError(
-              'Não foi possível obter os dados da conta WhatsApp. Por favor, complete todo o fluxo de configuração antes de fechar o popup.'
+              'Não foi possível obter o ID da conta WhatsApp Business. Por favor, complete todo o fluxo antes de fechar o popup.'
             );
             return;
           }
 
-          onConnect({ code, phone_number_id, waba_id }).catch((err) => {
+          // phone_number_id é resolvido automaticamente pelo backend via /{waba_id}/phone_numbers
+          onConnect({ code, phone_number_id: '', waba_id }).catch((err) => {
             setError(err instanceof Error ? err.message : 'Erro ao conectar coexistência');
           });
         } else {
@@ -130,7 +135,13 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
         config_id: configId,
         response_type: 'code',
         override_default_response_type: true,
-        extras: { version: 'v2-public-preview' },
+        // Conforme documentação oficial da Meta para coexistência:
+        // https://developers.facebook.com/docs/whatsapp/embedded-signup/coexistence
+        extras: {
+          setup: {},
+          featureType: 'whatsapp_business_app_onboarding',
+          sessionInfoVersion: '3',
+        },
       }
     );
   };

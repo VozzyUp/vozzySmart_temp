@@ -3,9 +3,10 @@
  *
  * Processa o callback do Meta Embedded Signup de Coexistência.
  * Recebe o code retornado pelo FB.login(), troca por access_token,
- * busca detalhes do número e salva as credenciais no Supabase.
+ * busca phone_number_id via /{waba_id}/phone_numbers (coexistência não retorna no evento),
+ * salva as credenciais no Supabase e dispara sincronização de contatos e histórico.
  *
- * Body: { code: string, phone_number_id: string, waba_id: string }
+ * Body: { code: string, waba_id: string, phone_number_id?: string }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -35,15 +36,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Body inválido' }, { status: 400 })
     }
 
-    const { code, phone_number_id, waba_id } = body as {
+    const { code, waba_id, phone_number_id: phoneNumberIdFromClient } = body as {
       code?: string
-      phone_number_id?: string
       waba_id?: string
+      phone_number_id?: string
     }
 
-    if (!code || !phone_number_id || !waba_id) {
+    if (!code || !waba_id) {
       return NextResponse.json(
-        { ok: false, error: 'Parâmetros obrigatórios: code, phone_number_id, waba_id' },
+        { ok: false, error: 'Parâmetros obrigatórios: code, waba_id' },
         { status: 400 }
       )
     }
@@ -90,10 +91,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Buscar detalhes do número para salvar display_phone_number e verified_name
+    // 2. Resolver phone_number_id — o evento de coexistência não retorna este campo,
+    //    então buscamos via /{waba_id}/phone_numbers
+    let phone_number_id = phoneNumberIdFromClient && phoneNumberIdFromClient.trim()
+      ? phoneNumberIdFromClient.trim()
+      : null
+
+    if (!phone_number_id) {
+      const phoneNumbersUrl = `${META_API_BASE}/${waba_id}/phone_numbers?fields=id,display_phone_number,verified_name`
+      const phoneNumbersResponse = await fetchWithTimeout(phoneNumbersUrl, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+        timeoutMs: 10000,
+      })
+
+      if (phoneNumbersResponse.ok) {
+        const phoneNumbersData = await safeJson<{ data?: Array<{ id: string }> }>(phoneNumbersResponse)
+        phone_number_id = phoneNumbersData?.data?.[0]?.id || null
+      }
+
+      if (!phone_number_id) {
+        return NextResponse.json(
+          { ok: false, error: 'Não foi possível obter o Phone Number ID da conta WhatsApp Business.' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // 3. Buscar detalhes do número — usa is_on_biz_app e platform_type conforme docs oficiais
     const phoneDetailsUrl =
       `${META_API_BASE}/${phone_number_id}` +
-      `?fields=display_phone_number,verified_name,quality_rating,coexistence_enabled`
+      `?fields=display_phone_number,verified_name,quality_rating,is_on_biz_app,platform_type`
 
     const phoneResponse = await fetchWithTimeout(phoneDetailsUrl, {
       method: 'GET',
@@ -110,14 +139,17 @@ export async function POST(request: NextRequest) {
       const phoneData = await safeJson<{
         display_phone_number?: string
         verified_name?: string
-        coexistence_enabled?: boolean
+        is_on_biz_app?: boolean
+        platform_type?: string
       }>(phoneResponse)
       displayPhoneNumber = phoneData?.display_phone_number
       verifiedName = phoneData?.verified_name
-      coexistenceEnabled = phoneData?.coexistence_enabled === true
+      // is_on_biz_app=true + platform_type=CLOUD_API indica coexistência ativa
+      coexistenceEnabled =
+        phoneData?.is_on_biz_app === true && phoneData?.platform_type === 'CLOUD_API'
     }
 
-    // 3. Salvar credenciais no Supabase
+    // 4. Salvar credenciais no Supabase
     await settingsDb.saveAll({
       phoneNumberId: phone_number_id,
       businessAccountId: waba_id,
@@ -129,7 +161,7 @@ export async function POST(request: NextRequest) {
     if (verifiedName) await settingsDb.set('verifiedName', verifiedName)
     await settingsDb.set('coexistenceEnabled', coexistenceEnabled ? 'true' : 'false')
 
-    // 4. Assinar webhooks de coexistência no WABA
+    // 5. Assinar webhooks de coexistência no WABA
     try {
       const verifyToken = await getVerifyToken()
       const webhookUrl = computeWebhookUrl()
@@ -138,7 +170,7 @@ export async function POST(request: NextRequest) {
         const form = new URLSearchParams()
         form.set(
           'subscribed_fields',
-          'messages,message_echoes,smb_message_echoes,history,smb_app_state_sync'
+          'messages,message_echoes,smb_message_echoes,history,smb_app_state_sync,account_update'
         )
         form.set('override_callback_uri', webhookUrl)
         form.set('verify_token', verifyToken)
@@ -155,8 +187,61 @@ export async function POST(request: NextRequest) {
         })
       }
     } catch (webhookError) {
-      // Best-effort: não falha a operação principal se o webhook não puder ser assinado
-      console.warn('[Coexistence] Falha ao assinar webhooks de coexistência (best-effort):', webhookError)
+      console.warn('[Coexistence] Falha ao assinar webhooks (best-effort):', webhookError)
+    }
+
+    // 6. Sincronizar contatos e histórico de mensagens (deve ser feito em até 24h após onboarding)
+    //    Etapa 1: smb_app_state_sync (contatos)
+    //    Etapa 2: history (histórico de mensagens)
+    const syncResults: { contacts?: string; history?: string } = {}
+    try {
+      const syncContactsResponse = await fetchWithTimeout(
+        `${META_API_BASE}/${phone_number_id}/smb_app_data`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            sync_type: 'smb_app_state_sync',
+          }),
+          cache: 'no-store',
+          timeoutMs: 15000,
+        }
+      )
+      if (syncContactsResponse.ok) {
+        const contactsData = await safeJson<{ request_id?: string }>(syncContactsResponse)
+        syncResults.contacts = contactsData?.request_id
+      }
+    } catch (e) {
+      console.warn('[Coexistence] Falha ao iniciar sync de contatos (best-effort):', e)
+    }
+
+    try {
+      const syncHistoryResponse = await fetchWithTimeout(
+        `${META_API_BASE}/${phone_number_id}/smb_app_data`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            sync_type: 'history',
+          }),
+          cache: 'no-store',
+          timeoutMs: 15000,
+        }
+      )
+      if (syncHistoryResponse.ok) {
+        const historyData = await safeJson<{ request_id?: string }>(syncHistoryResponse)
+        syncResults.history = historyData?.request_id
+      }
+    } catch (e) {
+      console.warn('[Coexistence] Falha ao iniciar sync de histórico (best-effort):', e)
     }
 
     return NextResponse.json({
@@ -166,7 +251,8 @@ export async function POST(request: NextRequest) {
       displayPhoneNumber,
       verifiedName,
       coexistenceEnabled,
-      message: 'Coexistência configurada com sucesso!',
+      syncResults,
+      message: 'Coexistência configurada com sucesso! Sincronização de contatos e histórico iniciada.',
     })
   } catch (error) {
     console.error('[Coexistence] Erro ao processar conexão:', error)

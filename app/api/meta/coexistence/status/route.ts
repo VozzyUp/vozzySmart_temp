@@ -1,7 +1,9 @@
 /**
  * GET /api/meta/coexistence/status
- * Verifica se a coexistência está habilitada para o número configurado.
- * Campo: coexistence_enabled na Graph API do Meta.
+ *
+ * Verifica se a coexistência está ativa para o número configurado.
+ * Conforme docs oficiais da Meta, usa os campos is_on_biz_app e platform_type:
+ * - is_on_biz_app=true + platform_type=CLOUD_API → coexistência ativa
  */
 
 import { NextResponse } from 'next/server'
@@ -15,6 +17,8 @@ export interface CoexistenceStatusResponse {
   ok: boolean
   coexistenceEnabled: boolean
   phoneNumberId?: string
+  isOnBizApp?: boolean
+  platformType?: string
   error?: string
 }
 
@@ -28,7 +32,7 @@ export async function GET(): Promise<NextResponse<CoexistenceStatusResponse>> {
     )
   }
 
-  const url = `${META_API_BASE}/${credentials.phoneNumberId}?fields=id,coexistence_enabled`
+  const url = `${META_API_BASE}/${credentials.phoneNumberId}?fields=id,is_on_biz_app,platform_type`
 
   const response = await fetchWithTimeout(url, {
     method: 'GET',
@@ -46,12 +50,21 @@ export async function GET(): Promise<NextResponse<CoexistenceStatusResponse>> {
     )
   }
 
-  const data = await safeJson<{ id?: string; coexistence_enabled?: boolean }>(response)
-  const coexistenceEnabled = data?.coexistence_enabled === true
+  const data = await safeJson<{
+    id?: string
+    is_on_biz_app?: boolean
+    platform_type?: string
+  }>(response)
+
+  // Coexistência ativa = número está no app WhatsApp Business E na Cloud API
+  const coexistenceEnabled =
+    data?.is_on_biz_app === true && data?.platform_type === 'CLOUD_API'
 
   return NextResponse.json({
     ok: true,
     coexistenceEnabled,
     phoneNumberId: credentials.phoneNumberId,
+    isOnBizApp: data?.is_on_biz_app,
+    platformType: data?.platform_type,
   })
 }
