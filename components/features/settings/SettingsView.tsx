@@ -151,15 +151,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           coexistenceEnabled={coexistenceEnabled}
         />
 
-        {/* Coexistence Section — visible when connected */}
-        {settings.isConnected && onConnectCoexistence && (
+        {/* Coexistence Section — visible always when handler is available.
+            When disconnected: serves as alternative connection method (Embedded Signup generates credentials).
+            When connected: allows enabling coexistence on an existing connection. */}
+        {onConnectCoexistence && (
           <CoexistenceSection
             coexistenceEnabled={coexistenceEnabled ?? false}
             coexistenceLoading={coexistenceLoading ?? false}
             isConnectingCoexistence={isConnectingCoexistence ?? false}
             onConnect={onConnectCoexistence}
             onRefreshStatus={onRefreshCoexistenceStatus ?? (() => {})}
+            isConnected={settings.isConnected}
           />
+        )}
+
+        {/* Separador entre Coexistência e formulário manual quando desconectado */}
+        {!settings.isConnected && onConnectCoexistence && (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-[var(--ds-border-default)]" />
+            <span className="text-xs text-[var(--ds-text-muted)] shrink-0">ou conecte manualmente</span>
+            <div className="flex-1 h-px bg-[var(--ds-border-default)]" />
+          </div>
         )}
 
         {/* Credentials Form - Only visible if disconnected OR editing */}

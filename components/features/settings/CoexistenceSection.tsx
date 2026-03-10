@@ -26,6 +26,8 @@ export interface CoexistenceSectionProps {
   isConnectingCoexistence: boolean;
   onConnect: (params: { code: string; phone_number_id: string; waba_id: string }) => Promise<void>;
   onRefreshStatus: () => void;
+  /** Quando false, exibe a seção como método alternativo de conexão inicial via Embedded Signup */
+  isConnected?: boolean;
 }
 
 declare global {
@@ -45,6 +47,7 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
   isConnectingCoexistence,
   onConnect,
   onRefreshStatus,
+  isConnected = true,
 }) => {
   const [showInstructions, setShowInstructions] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -183,7 +186,7 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-base font-semibold text-[var(--ds-text-primary)]">
-              Coexistência do WhatsApp
+              {isConnected ? 'Coexistência do WhatsApp' : 'Conectar via WhatsApp Business App'}
             </h3>
             {coexistenceEnabled && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
@@ -191,12 +194,19 @@ export const CoexistenceSection: React.FC<CoexistenceSectionProps> = ({
                 Ativa
               </span>
             )}
+            {!isConnected && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--ds-bg-surface)] text-[var(--ds-text-muted)] border border-[var(--ds-border-default)]">
+                Alternativa ao formulário manual
+              </span>
+            )}
           </div>
 
           <p className="text-sm text-[var(--ds-text-secondary)] mt-1 leading-relaxed">
             {coexistenceEnabled
               ? 'Seu WhatsApp Business App e a Cloud API estão funcionando juntos no mesmo número. Mensagens são sincronizadas em tempo real entre os dois.'
-              : 'Use o WhatsApp Business App (celular) e a Cloud API simultaneamente no mesmo número, sem perder o histórico de conversas.'}
+              : isConnected
+                ? 'Use o WhatsApp Business App (celular) e a Cloud API simultaneamente no mesmo número, sem perder o histórico de conversas.'
+                : 'Se você já usa o WhatsApp Business App no celular, clique aqui para conectar via QR code. Isso configura a Cloud API automaticamente e mantém o app funcionando em paralelo.'}
           </p>
 
           {/* Benefits when not yet enabled */}
