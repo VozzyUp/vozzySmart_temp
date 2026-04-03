@@ -217,17 +217,39 @@ export function AIGatewayPanel() {
             </button>
 
             {showFallbackConfig && (
-              <div className="mt-4 border-t border-[var(--ds-border-subtle)] pt-4">
-                <p className="text-xs text-[var(--ds-text-secondary)] mb-3">
-                  Selecione os modelos que serão usados como fallback quando o modelo primário falhar.
-                </p>
+              <div className="mt-4 border-t border-[var(--ds-border-subtle)] pt-4 space-y-3">
+                {/* Chips dos selecionados */}
+                {(config.fallbackModels?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {(config.fallbackModels ?? []).map((id) => {
+                      const label = models.find((m) => m.id === id)?.name ?? id.split('/').pop() ?? id;
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] text-violet-300"
+                        >
+                          {label}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFallbackModel(id)}
+                            disabled={saving}
+                            aria-label={`Remover ${label}`}
+                            className="text-violet-400 hover:text-white disabled:opacity-50 leading-none"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Busca */}
-                <div className="relative mb-3">
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--ds-text-muted)]" />
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--ds-text-muted)]" />
                   <input
                     type="text"
-                    placeholder="Buscar modelos..."
+                    placeholder="Buscar modelos para adicionar..."
                     value={modelSearch}
                     onChange={(e) => setModelSearch(e.target.value)}
                     className="w-full rounded-lg border border-[var(--ds-border-default)] bg-[var(--ds-bg-surface)] py-1.5 pl-8 pr-3 text-xs text-[var(--ds-text-primary)] placeholder:text-[var(--ds-text-muted)] focus:outline-none focus:ring-1 focus:ring-violet-500/40"
@@ -235,42 +257,38 @@ export function AIGatewayPanel() {
                 </div>
 
                 {modelsLoading ? (
-                  <div className="flex items-center gap-2 py-4 text-[var(--ds-text-muted)]">
+                  <div className="flex items-center gap-2 py-3 text-[var(--ds-text-muted)]">
                     <Loader2 size={14} className="animate-spin" />
                     <span className="text-xs">Carregando modelos...</span>
                   </div>
-                ) : (
-                  <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                    {models
-                      .filter((m) => {
-                        const q = modelSearch.toLowerCase();
-                        return (
-                          !q ||
-                          m.name.toLowerCase().includes(q) ||
-                          m.id.toLowerCase().includes(q) ||
-                          m.provider.toLowerCase().includes(q)
-                        );
-                      })
-                      .map((model) => {
-                        const isSelected = config.fallbackModels?.includes(model.id);
+                ) : (() => {
+                  const selected = new Set(config.fallbackModels ?? []);
+                  const q = modelSearch.toLowerCase();
+                  const filtered = models.filter(
+                    (m) => !q || m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q)
+                  );
+                  // Não-selecionados primeiro, selecionados esmaecidos no final
+                  const sorted = [...filtered].sort((a, b) => (selected.has(a.id) ? 1 : 0) - (selected.has(b.id) ? 1 : 0));
+                  return (
+                    <div className="max-h-60 space-y-1 overflow-y-auto pr-1">
+                      {sorted.map((model) => {
+                        const isSelected = selected.has(model.id);
                         return (
                           <button
                             key={model.id}
                             type="button"
                             onClick={() => handleToggleFallbackModel(model.id)}
                             disabled={saving}
-                            className={`flex w-full items-center justify-between rounded-lg border p-2.5 transition ${
+                            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 transition ${
                               isSelected
-                                ? 'border-violet-500/30 bg-violet-500/10'
+                                ? 'border-violet-500/20 bg-violet-500/5 opacity-50'
                                 : 'border-[var(--ds-border-default)] bg-[var(--ds-bg-surface)] hover:bg-[var(--ds-bg-hover)]'
-                            } ${saving ? 'opacity-60' : ''}`}
+                            } ${saving ? 'cursor-not-allowed' : ''}`}
                           >
                             <div className="flex items-center gap-2.5">
                               <div
                                 className={`flex size-4 shrink-0 items-center justify-center rounded border transition ${
-                                  isSelected
-                                    ? 'border-violet-500 bg-violet-500'
-                                    : 'border-[var(--ds-border-default)] bg-[var(--ds-bg-surface)]'
+                                  isSelected ? 'border-violet-500 bg-violet-500' : 'border-[var(--ds-border-default)]'
                                 }`}
                               >
                                 {isSelected && <Check size={10} className="text-white" />}
@@ -286,17 +304,14 @@ export function AIGatewayPanel() {
                           </button>
                         );
                       })}
-                    {models.length > 0 && modelSearch && (
-                      <p className="pt-1 text-center text-[10px] text-[var(--ds-text-muted)]">
-                        {models.filter((m) => {
-                          const q = modelSearch.toLowerCase();
-                          return m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q);
-                        }).length}{' '}
-                        de {models.length} modelos
-                      </p>
-                    )}
-                  </div>
-                )}
+                      {q && (
+                        <p className="pt-1 text-center text-[10px] text-[var(--ds-text-muted)]">
+                          {filtered.length} de {models.length} modelos
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
