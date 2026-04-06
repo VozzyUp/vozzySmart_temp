@@ -9,27 +9,30 @@ export interface AIModelInfo {
   isAlias: boolean
 }
 
-const EXCLUDED_PATTERNS = [
-  // Gemini: modelos especializados (não são chat/texto)
-  'tts',
-  'image',
-  'robotics',
-  'computer-use',
-  'deep-research',
-  'lyria',
-  'gemma',
-  'nano-banana',
-  'embedding',
-  // OpenAI: modelos especializados (não são chat/texto)
-  'gpt-3.5',    // muito antigo
-  'instruct',   // completion API, não chat
-  'transcribe', // STT, não chat
-  'realtime',   // streaming de áudio, não chat
-  'audio',      // entrada/saída de áudio, não chat
+// Padrões de modelos a excluir do fetch do Google
+const GOOGLE_EXCLUDED_PATTERNS = [
+  'tts', 'image', 'robotics', 'computer-use', 'deep-research',
+  'lyria', 'gemma', 'nano-banana', 'embedding', 'aqa',
 ]
 
-function isExcluded(id: string): boolean {
-  return EXCLUDED_PATTERNS.some((p) => id.includes(p))
+// Padrões de modelos a excluir do fetch da OpenAI
+const OPENAI_EXCLUDED_PATTERNS = [
+  'audio', 'image', 'realtime', 'search', 'codex', 'deep-research',
+  'embedding', 'tts', 'whisper', 'davinci', 'babbage', 'moderation',
+  'transcribe', 'preview', 'instruct',
+]
+
+// IDs com sufixo de data completo (ex: gpt-4o-2024-08-06)
+const DATE_SUFFIX_RE = /\d{4}-\d{2}-\d{2}$/
+// IDs com sufixo MMDD legado (ex: gpt-4-0613, gpt-4-1106-preview)
+const MMDD_SUFFIX_RE = /\d{4}$/
+
+function isGoogleExcluded(id: string): boolean {
+  return GOOGLE_EXCLUDED_PATTERNS.some((p) => id.includes(p))
+}
+
+function isOpenAIExcluded(id: string): boolean {
+  return OPENAI_EXCLUDED_PATTERNS.some((p) => id.includes(p))
 }
 
 async function getSettingValue(key: string): Promise<string | null> {
@@ -58,7 +61,7 @@ async function fetchGoogleModels(apiKey: string): Promise<AIModelInfo[]> {
       return (
         Array.isArray(m.supportedGenerationMethods) &&
         m.supportedGenerationMethods.includes('generateContent') &&
-        !isExcluded(id)
+        !isGoogleExcluded(id)
       )
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,19 +92,23 @@ async function fetchOpenAIModels(apiKey: string): Promise<AIModelInfo[]> {
 
   const data = await res.json()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const all: AIModelInfo[] = (data.data ?? [])
+  return (data.data ?? [])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((m: any) => m.id.startsWith('gpt-') && !isExcluded(m.id) && !/-\d{4}/.test(m.id))
+    .filter((m: any) => {
+      const id: string = m.id
+      const isChat = id.startsWith('gpt-4') || id.startsWith('gpt-5')
+      const isSnapshot = DATE_SUFFIX_RE.test(id) || MMDD_SUFFIX_RE.test(id)
+      const isLegacy = id === 'gpt-4'
+      return isChat && !isOpenAIExcluded(id) && !isSnapshot && !isLegacy
+    })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((m: any) => ({
       id: m.id as string,
       name: m.id as string,
       provider: 'openai' as const,
-      isAlias: true, // todos os modelos retornados são aliases (sem data = sempre atualizados)
+      isAlias: true,
     }))
     .sort((a: AIModelInfo, b: AIModelInfo) => b.id.localeCompare(a.id))
-
-  return all
 }
 
 /**
