@@ -336,11 +336,16 @@ function parseHandoffMessage(content: string): { title: string; reason: string; 
 
 function resolveMediaUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  // Se parece ser um ID numérico do Meta (não começa com http), usar proxy
-  if (/^\d+$/.test(url.trim())) {
-    return `/api/inbox/media/${url.trim()}`
+  const trimmed = url.trim()
+  // ID numérico do Meta → proxy
+  if (/^\d+$/.test(trimmed)) {
+    return `/api/inbox/media/${trimmed}`
   }
-  return url
+  // URL do CDN da Meta (requer Authorization header — browser não consegue enviar) → proxy
+  if (trimmed.includes('fbsbx.com') || trimmed.includes('fbcdn.net') || trimmed.includes('facebook.com/')) {
+    return `/api/inbox/media/url?src=${encodeURIComponent(trimmed)}`
+  }
+  return trimmed
 }
 
 // =============================================================================
