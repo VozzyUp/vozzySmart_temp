@@ -8,7 +8,6 @@ import { WebhookConfigSection } from './WebhookConfigSection';
 import { CalendarBookingPanel } from './CalendarBookingPanel';
 import { FlowEndpointPanel } from './FlowEndpointPanel';
 import { CredentialsForm } from './CredentialsForm';
-import { OnPremisesConfigPanel } from './OnPremisesConfigPanel';
 import { UpstashConfigPanel } from './UpstashConfigPanel';
 import { ApiDocsPanel } from './ApiDocsPanel';
 import { useDevMode } from '@/components/providers/DevModeProvider';
@@ -158,9 +157,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             refreshMetaApp={refreshMetaApp}
           />
         )}
-
-        {/* On-Premises / Coexistência API Mode */}
-        {settings.isConnected && <OnPremisesConfigPanel />}
 
         {/* ========== ORDEM: 1. Sistema Online (acima), 2. Webhooks, 3. Contato de Teste, 4. Agendamento ========== */}
 
