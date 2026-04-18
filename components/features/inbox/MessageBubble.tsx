@@ -407,15 +407,26 @@ function VideoMessage({ url, caption }: { url: string; caption?: string }) {
 
 function AudioMessage({ url }: { url: string; isVoice?: boolean }) {
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [hasError, setHasError] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
 
-  const toggle = () => {
+  const toggle = async () => {
     const el = audioRef.current
-    if (!el) return
+    if (!el || isLoading) return
     if (isPlaying) {
       el.pause()
     } else {
-      el.play()
+      setHasError(false)
+      setIsLoading(true)
+      try {
+        await el.play()
+      } catch {
+        setHasError(true)
+        setIsPlaying(false)
+      } finally {
+        setIsLoading(false)
+      }
     }
   }
 
@@ -424,9 +435,12 @@ function AudioMessage({ url }: { url: string; isVoice?: boolean }) {
       {/* Play/Pause */}
       <button
         onClick={toggle}
-        className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0 transition-colors"
+        disabled={isLoading}
+        className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50"
       >
-        {isPlaying ? (
+        {isLoading ? (
+          <span className="h-3.5 w-3.5 border-2 border-white/60 border-t-white rounded-full animate-spin block" />
+        ) : isPlaying ? (
           <Pause className="h-3.5 w-3.5 text-white" />
         ) : (
           <Play className="h-3.5 w-3.5 text-white ml-0.5" />
@@ -435,27 +449,35 @@ function AudioMessage({ url }: { url: string; isVoice?: boolean }) {
 
       {/* Onda + ícone */}
       <div className="flex items-center gap-1 flex-1">
-        <Volume2 className="h-3.5 w-3.5 text-white/60 shrink-0" />
-        <div className="flex gap-0.5 items-center h-6">
-          {[...Array(14)].map((_, i) => (
-            <div
-              key={i}
-              className={cn(
-                'w-0.5 rounded-full',
-                isPlaying ? 'bg-white/80 animate-pulse' : 'bg-white/40'
-              )}
-              style={{ height: `${4 + Math.abs(Math.sin(i * 0.8)) * 14}px` }}
-            />
-          ))}
-        </div>
+        {hasError ? (
+          <span className="text-xs text-red-400">Erro ao carregar áudio</span>
+        ) : (
+          <>
+            <Volume2 className="h-3.5 w-3.5 text-white/60 shrink-0" />
+            <div className="flex gap-0.5 items-center h-6">
+              {[...Array(14)].map((_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'w-0.5 rounded-full',
+                    isPlaying ? 'bg-white/80 animate-pulse' : 'bg-white/40'
+                  )}
+                  style={{ height: `${4 + Math.abs(Math.sin(i * 0.8)) * 14}px` }}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <audio
         ref={audioRef}
         src={url}
-        onPlay={() => setIsPlaying(true)}
+        preload="metadata"
+        onPlay={() => { setIsPlaying(true); setIsLoading(false) }}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
+        onError={() => { setHasError(true); setIsPlaying(false); setIsLoading(false) }}
         className="hidden"
       />
     </div>
