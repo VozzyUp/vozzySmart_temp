@@ -53,7 +53,11 @@ export async function POST(request: NextRequest) {
     }
 
     const mimeType = file.type || 'application/octet-stream'
-    const category = ALLOWED_TYPES[mimeType]
+    // Normaliza MIME type removendo parâmetros de codec (ex: "audio/webm;codecs=opus" → "audio/webm")
+    const baseMimeType = mimeType.split(';')[0].trim()
+    // WebM com Opus é o mesmo codec do OGG/Opus — trata como audio/ogg para compatibilidade WhatsApp
+    const normalizedMimeType = baseMimeType === 'audio/webm' ? 'audio/ogg' : baseMimeType
+    const category = ALLOWED_TYPES[normalizedMimeType]
 
     if (!category) {
       return NextResponse.json(
@@ -72,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Gerar caminho único com timestamp
-    const ext = getExtension(file.name, mimeType)
+    const ext = getExtension(file.name, normalizedMimeType)
     const timestamp = Date.now()
     const random = Math.random().toString(36).slice(2, 8)
     const path = `${category}/${timestamp}-${random}.${ext}`
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest) {
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
       .upload(path, buffer, {
-        contentType: mimeType,
+        contentType: normalizedMimeType,
         upsert: false,
       })
 
@@ -105,7 +109,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       url: urlData.publicUrl,
       filename: file.name,
-      mimeType,
+      mimeType: normalizedMimeType,
       category,
       size: file.size,
     })
