@@ -14,18 +14,28 @@ function CallbackContent() {
     const origin = window.location.origin
 
     if (code) {
-      // Envia o código para a janela pai (EmbeddedSignupButton aguarda)
-      window.opener?.postMessage({ type: 'embedded_signup_code', code }, origin)
+      // 1. Tenta postMessage (funciona quando opener não foi nulificado)
+      try {
+        window.opener?.postMessage({ type: 'embedded_signup_code', code }, origin)
+      } catch {}
+
+      // 2. Fallback: localStorage (lido pelo EmbeddedSignupButton via polling)
+      try {
+        localStorage.setItem('embedded_signup_code', JSON.stringify({ code, ts: Date.now() }))
+      } catch {}
+
       setStatus('done')
     } else if (error) {
-      window.opener?.postMessage({ type: 'embedded_signup_error', error }, origin)
+      try {
+        window.opener?.postMessage({ type: 'embedded_signup_error', error }, origin)
+        localStorage.setItem('embedded_signup_code', JSON.stringify({ error, ts: Date.now() }))
+      } catch {}
       setStatus('error')
     } else {
       setStatus('error')
     }
 
-    // Fecha o popup após breve delay para garantir postMessage entregue
-    const t = setTimeout(() => window.close(), 500)
+    const t = setTimeout(() => window.close(), 800)
     return () => clearTimeout(t)
   }, [params])
 

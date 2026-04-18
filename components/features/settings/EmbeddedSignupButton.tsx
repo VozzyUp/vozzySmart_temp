@@ -170,11 +170,37 @@ export function EmbeddedSignupButton({
 
     setStatus('waiting')
 
+    // Limpa qualquer código antigo do localStorage
+    try { localStorage.removeItem('embedded_signup_code') } catch {}
+
+    // Polling: lê código do localStorage (fallback quando window.opener é nulo)
+    const pollStorage = setInterval(() => {
+      try {
+        const raw = localStorage.getItem('embedded_signup_code')
+        if (!raw) return
+        const parsed = JSON.parse(raw)
+        // Ignora entradas com mais de 5 minutos
+        if (Date.now() - parsed.ts > 5 * 60 * 1000) {
+          localStorage.removeItem('embedded_signup_code')
+          return
+        }
+        localStorage.removeItem('embedded_signup_code')
+        clearInterval(pollStorage)
+        clearInterval(checkClosed)
+        if (parsed.code) {
+          exchangeCode(parsed.code)
+        } else {
+          toast.error('Conexão cancelada ou negada pela Meta')
+          setStatus('idle')
+        }
+      } catch {}
+    }, 500)
+
     // Monitora se popup foi fechado sem completar
     const checkClosed = setInterval(() => {
       if (popupRef.current?.closed) {
         clearInterval(checkClosed)
-        // Usa setter funcional para não capturar stale closure
+        clearInterval(pollStorage)
         setStatus((prev) => (prev === 'waiting' ? 'idle' : prev))
       }
     }, 1000)
